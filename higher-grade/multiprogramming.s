@@ -111,7 +111,7 @@ boot:
 # Strings used by the jobs to print messages to the Run I/O pane. 
 
 JOB_GETC_HELLO:		.asciiz "Job started running getc\n"
-JOB_ÌNCREMENT_HELLO:	.asciiz "Job started running increment\n"
+JOB_INCREMENT_HELLO:	.asciiz "Job started running increment\n"
 
 JOB_ID:			.asciiz "Job id = "
 NL:			.asciiz "\n"
@@ -149,7 +149,7 @@ job_increment:
 	# Use the MARS builtin system call (4) to print string.
 	
 	li $v0, 4
-	la $a0, JOB_ÌNCREMENT_HELLO
+	la $a0, JOB_INCREMENT_HELLO
 	syscall 
 
 	# Use the MARS builtin system call (4) to print string.
@@ -420,6 +420,9 @@ __save_running_job_context:
  	 
 	sw $k0,   0($k1)	# PC
 	sw $v0    4($k1)	# $v0
+	sw $a0    8($k1)	# $a0
+	sw $a1    12($k1)	# $a1
+	sw $s0    16($k1)	# $s0
 	
 TODO_1: # Save $a0, $a1, $s0 to the context. 
         	
@@ -457,6 +460,9 @@ __restore_job_context:
 
 	lw $k1,  0($k0) # PC
 	lw $v0,  4($k0) # $v0
+	lw $a0,  8($k0) # $a0
+	lw $a1,  12($k0) # $a1
+	lw $s0,  16($k0) # $s0
 	
 TODO_2: # Restore $a0, $a1, $s0 from the context.
 	
@@ -556,8 +562,8 @@ __trap_handler:
    	beqz $v0, __system_call_getjid
    	
 TODO_3: # Jump to label __system_call_getc for system call code 12.
-	
-   	
+   	beq $v0, 12, __system_call_getc
+
    	j __unsported_system_call
  
  __system_call_getjid: 
@@ -572,7 +578,7 @@ TODO_3: # Jump to label __system_call_getc for system call code 12.
 TODO_4: # Put the jid of the caller in register $a0.
 	
 	# TIP: The kernel saved the jid of the running job in memory at label __running
-        	
+	lw $a0, __running	
 	
 	j __return_from_exception
    	  	
@@ -607,12 +613,13 @@ TODO_5:	# Get address of the instruction (teqi) causing the exception.
 	# the custom system call. 
 
 	# Each instruction is 4 bytes. 
+	mfc0 $t0, $14
 	
 TODO_6:	# To resume at the instruction following the teqi instruction, 
 	# add 4 to EPC and store the result in $t1. 
 	
 	# TIP: Use the addi (Add Immediate) instruction. 
-	
+	addi $t1, $t0, 4	
 	
 TODO_7:	# The value of EPC + 4 must now be saved in the context of the caller. 
 
@@ -625,7 +632,7 @@ TODO_7:	# The value of EPC + 4 must now be saved in the context of the caller.
 
 	# TIP: Use the sw (Store Word) instruction to save the content of EPC + 4 ($t1) 
 	# Save EPC + 4 in user context at offset 0 (program counter). 
-	
+	sw $t1, 0($k1)	
 		
 	# Job id of job to resume while the calling job waits. 
 	
@@ -783,7 +790,7 @@ TODO_8:	# Before resuming the waiting job, put the ASCII value of the pressed
 	
 	# TIP: Use the (Load Word) instruction to read the ASCII value stored in 
 	# receiver data into $v0. 
-	
+	lw $v0, 0($k1)
 	
 	# Restore $at.
 	
