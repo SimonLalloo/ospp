@@ -66,10 +66,22 @@ boot:
 	la $t0, __job_1_context
 	la $t1, job_getc
 	sw $t1, 0($t0)
+
+	# Set PC in job 2 context
+
+	la $t0, __job_2_context
+	la $t1, job_gets
+	sw $t1, 0($t0)
 	
+	# -- There is only support for 2 jobs, so this isn't running now
 	# Job 1 will start to execute.
 	
-	li $t0, 1
+	#li $t0, 1
+	#sw $t0, __running
+
+	# Mark job 2 as ready
+
+	li $t0, 2
 	sw $t0, __running
 	
 	# Mark job 0 as ready 
@@ -111,18 +123,26 @@ boot:
 # Strings used by the jobs to print messages to the Run I/O pane. 
 
 JOB_GETC_HELLO:		.asciiz "Job started running getc\n"
+JOB_GETS_HELLO:		.asciiz "Job started running gets\n"
 JOB_INCREMENT_HELLO:	.asciiz "Job started running increment\n"
 
 JOB_ID:			.asciiz "Job id = "
 NL:			.asciiz "\n"
 
 PRESS_KEY:		.asciiz "Press a key on the keyboard ...\n"
+PRESS_KEYS:		.asciiz "Type some stuff on the keyboard ...\n"
 PRESS_MMIO_KEY:		.asciiz "Type a character in the MMIO Simulator keyboard input area ..\n"
+PRESS_MMIO_KEYS:	.asciiz "Type some stuff in the MMIO Simulator keyboard input area ..\n"
 
 # In these strings the X is at offset 17 and will be replaced before printing. 
 
 MARS_GETC_RESULT: 	.asciiz "\nMARS   getc ==> X\n"
 CUSTOM_GETC_RESULT: 	.asciiz "\nCustom getc ==> X\n"
+MARS_GETS_RESULT: 	.asciiz "\nMARS   gets ==> \n"
+CUSTOM_GETS_RESULT: 	.asciiz "\nCustom gets ==> \n"
+
+# Buffer for gets
+GETS_BUFFER:		.space 0x000000ff
 
 # Memory addresses to the memory mapped receiver registers. 
 RECEIVER_CONTROL:	.word 0xffff0000
@@ -277,6 +297,101 @@ job_getc_infinite_loop:
 	
 	j job_getc_infinite_loop
 
+#------------------------------------------------------------------------------
+# GETS
+#
+# User level job. 
+#------------------------------------------------------------------------------
+
+job_gets:
+	
+	# Use the MARS builtin system call (4) to print strings.
+	
+	li $v0, 4               # System call code (4) print string. 
+	la $a0, JOB_GETS_HELLO  # String to print.
+	syscall 		# Execute the MARS built-in system call (4) to print string.
+	
+	# Use the MARS builtin system call (4) to print string.
+	
+	li $v0, 4
+	la $a0, JOB_ID
+	syscall
+	
+	# Use the custom system call (getjid, system call 0) to get the kernel id of this job. 
+	
+	li $v0, 0	# Custom system call code 0 (getjid).
+	teqi $zero, 0   # Generate a trap exception to handle the system call.
+	
+	# $a0 now containts the job id. 
+	
+	# Use the MARS builtin system call (1) to print the id (integer).
+
+	li $v0, 1
+	syscall
+
+	# Use the MARS builtin system call (4) to print string.
+	
+	li $v0, 4
+	la $a0, NL
+	syscall
+
+	# Use the MARS builtin system call (4) to print strings.
+	
+	li $v0, 4               # System call code (4) print string. 	
+	la $a0, PRESS_KEYS       # String to print.
+	syscall 		# Execute the Mars built-in system call (4) to print string.	
+
+	# Use the built in version of the gets system call
+	
+	li $v0, 8		# System call code (8) read_string.
+	# Set $a0 to address to store string
+	la $a0, GETS_BUFFER 
+	# Set $a1 max num of chars to read + 1
+	li $a1, 10
+	syscall 		# Execute the Mars built-in system call (12) read_char.	
+	
+	# ASCII value of key pressed now in $v0
+
+	# Use the MARS builtin system call (4) to print strings.
+	
+	li $v0, 4
+	la $a0, MARS_GETS_RESULT
+	syscall 
+	li $v0, 4
+	la $a0, GETS_BUFFER
+	syscall
+	
+	# Set $s0 to 0xabcd1234.
+	
+	li $s0, 0xabcd1234
+ 
+	# Enter infintite loop. 
+	
+job_gets_infinite_loop:
+	
+	# Use the MARS builtin system call (4) to print strings.
+	
+	li $v0, 4               # System call code (4) print string. 	
+	la $a0, PRESS_MMIO_KEYS  # String to print.
+	syscall 		# Execute the Mars built-in system call (4) to print string.	
+
+	# Execute the custom gets system call (system call 8).
+	
+	li $v0, 8
+	teqi $zero, 0    
+	
+	# Use the MARS builtin system call (4) to print strings.
+
+	li $v0, 4
+	la $a0, MARS_GETS_RESULT
+	syscall 
+	li $v0, 4
+	la $a0, GETS_BUFFER
+	syscall
+	
+	j job_gets_infinite_loop
+
+
 
 ###############################################################################
 # KERNEL DATA SEGMENT
@@ -300,11 +415,13 @@ job_getc_infinite_loop:
 
 __job_0_context: .space 24 
 __job_1_context: .space 24
+__job_2_context: .space 24
 
 # Array with pointers to job contexts. Job id used as index. 
 
 __context_array:   __job_0_context
                  , __job_1_context
+		 , __job_2_context
 
 # For each of the states, store -1 if no job currently in this state or store
 # the job id (0 or 1) of the jobb currently in this state. 
