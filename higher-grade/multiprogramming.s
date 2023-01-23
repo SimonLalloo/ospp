@@ -427,7 +427,7 @@ __context_array:   __job_0_context
                  , __job_1_context
 		 , __job_2_context
 
-TODO: # Come up with a better solution
+#TODO: # Come up with a better solution
 __gets_offset: .word 1
 
 # For each of the states, store -1 if no job currently in this state or store
@@ -922,7 +922,7 @@ __kbd_interrupt:
 	li $k1, -1
 	beq $k0, $k1, __return_from_interrupt 
 
-TODO:	# This is a bad solution, but it should work
+#TODO:	# This is a bad solution, but it should work
 	li $k1, 1		# The hard coded id of the getc job
 	beq $k0, $k1, __getc_system_call_pending
 	li $k1, 2		# The hard coded id of the gets job
@@ -992,22 +992,18 @@ TODO_8:	# Before resuming the waiting job, put the ASCII value of the pressed
 
 __gets_system_call_pending:
 	
-	# A job is waiting for input.
-	# Swap waiting task and running task
-	
+	# A job is waiting for input.	
 	lw $k0, __waiting
-	lw $k1, __running
-	sw $k0, __running
-	sw $k1, __ready
-	
-	# No job is waiting anymore. 
-	li $t0, -1
-	sw $t0, __waiting
-	
+
 	# $k0 holds id of job waiting for input, restore the context of this job. 
 	jal __restore_job_context
 
-TODO: # Save & restore registers: $t0, $t1, $t2
+	# Save & restore registers: $t0, $t1, $t2, $t3
+
+	sw $t0, 0($sp)
+	sw $t1, 4($sp)
+	sw $t2, 8($sp)
+	sw $t3, 12($sp)
 
 	# Buffer location in $a0
 	# Buffer length in $a1
@@ -1026,23 +1022,64 @@ TODO: # Save & restore registers: $t0, $t1, $t2
 	# Before resuming the waiting job, put the ASCII value of the pressed
 	# key in the buffer. 
 	add $t1, $a0, $t0
-	sw $k1, 0($t1)
+	sb $k1, 0($t1)
 	# Increase offset
-	addi $t0, $t0, 4
+	addi $t0, $t0, 1
 	la $t1, __gets_offset
 	sw $t0, 0($t1)
 
-TODO: # Do something if buffer is full
+	addi $t3, $a1 -1 # Get buffer size-1
+	bne $t3, $t0, __return_to_other_job # If buffer size - 1 == offset do
+	add $t3, $a0, $a1 # Get pointer to last character in string
+	sb $zero, 0($t3) # Store NUL character at end of string
 
 __return_to_other_job:
+
+	# Restore used registers
+	lw $t0, 0($sp)
+	lw $t1, 4($sp)
+	lw $t2, 8($sp)
+	lw $t3, 12($sp)
+
 	
+	lw $k0, __running
 	
+	# Restore $at.
+	lw $at, 20($k0) 
+
+	# $k0 holds id of running job, restore the context of this job. 
+	jal __restore_job_context
+
+	# NOTE: From this point no pseudo instructions can be used. 
+	# Done handling the interupt, enable all interrupts.
+	# Get content of the STATUS register.  
+	
+	mfc0 $k0, $12
+	
+	# Set bit 0 (interrupt enable) to 1.
+	li $k1, 1
+	or $k0, $k0, $k1
+	
+	# Update the STATUS register. 
+	mtc0 $k0, $12 
+	
+	# Resume execution of the waiting job. The eret instruction sets $pc to the
+	# value of EPC.
+	
+	eret
 
 __pressed_return:
 
-TODO: # Make sure the correct job is restored and kept running
+	# Restore used registers
+	lw $t0, 0($sp)
+	lw $t1, 4($sp)
+	lw $t2, 8($sp)
+	lw $t3, 12($sp)
+
+
+#TODO: # Make sure the correct job is restored and kept running
 	lw $k0, __waiting
-	lw $k1, __running
+	lw $k0, __running
 	sw $k0, __running
 	sw $k1, __ready
 	
