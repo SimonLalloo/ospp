@@ -392,6 +392,9 @@ job_gets_infinite_loop:
 	li $v0, 4
 	la $a0, GETS_BUFFER
 	syscall
+	li $v0, 4
+	la $a0, NL
+	syscall
 	
 	j job_gets_infinite_loop
 
@@ -428,7 +431,7 @@ __context_array:   __job_0_context
 		 , __job_2_context
 
 #TODO: # Come up with a better solution
-__gets_offset: .word 1
+__gets_offset: .word 0
 
 # For each of the states, store -1 if no job currently in this state or store
 # the job id (0 or 1) of the jobb currently in this state. 
@@ -657,6 +660,8 @@ __kernel:
 	
 	# All interupts sets the exception code == 0.   
 
+# TODO: Input is an interrupt, not an exception
+#       Move stuff from the trap_handler to here
    	beqz $k1, __interrupt
 	
 	# A non-zero exception means its an exception. 
@@ -808,6 +813,9 @@ __system_call_gets:
 	# Block the caller by changing the state of the caller to waiting. 
 	sw $k0, __waiting
 	
+	# Set the buffer offset to 0
+	sw $zero, __gets_offset
+
 	# exception thrown from $t0
 	# Keep executing from $t1 after handling
 	mfc0 $t0, $14
@@ -1017,6 +1025,7 @@ __gets_system_call_pending:
 	
 	# If the key was enter
 	li $t2, 10
+	lw $k1, 0($k1) # Load the letter into $k1
 	beq $k1, $t2, __pressed_return
 
 	# Before resuming the waiting job, put the ASCII value of the pressed
@@ -1028,10 +1037,11 @@ __gets_system_call_pending:
 	la $t1, __gets_offset
 	sw $t0, 0($t1)
 
-	addi $t3, $a1 -1 # Get buffer size-1
+	addi $t3, $a1, -1 # Get buffer size-1
 	bne $t3, $t0, __return_to_other_job # If buffer size - 1 == offset do
 	add $t3, $a0, $a1 # Get pointer to last character in string
 	sb $zero, 0($t3) # Store NUL character at end of string
+	j __pressed_return # If the buffer is full, return.
 
 __return_to_other_job:
 
@@ -1040,15 +1050,14 @@ __return_to_other_job:
 	lw $t1, 4($sp)
 	lw $t2, 8($sp)
 	lw $t3, 12($sp)
-
 	
 	lw $k0, __running
-	
-	# Restore $at.
-	lw $at, 20($k0) 
 
 	# $k0 holds id of running job, restore the context of this job. 
 	jal __restore_job_context
+
+	# Restore $at.
+	lw $at, 20($k0) 
 
 	# NOTE: From this point no pseudo instructions can be used. 
 	# Done handling the interupt, enable all interrupts.
@@ -1076,10 +1085,8 @@ __pressed_return:
 	lw $t2, 8($sp)
 	lw $t3, 12($sp)
 
-
-#TODO: # Make sure the correct job is restored and kept running
 	lw $k0, __waiting
-	lw $k0, __running
+	lw $k1, __running
 	sw $k0, __running
 	sw $k1, __ready
 	
@@ -1087,11 +1094,11 @@ __pressed_return:
 	li $t0, -1
 	sw $t0, __waiting
 
-	# Restore $at.
-	lw $at, 20($k0) 
-
 	# $k0 holds id of job waiting for input, restore the context of this job. 
 	jal __restore_job_context
+
+	# Restore $at.
+	lw $at, 20($k0) 
 
 	# NOTE: From this point no pseudo instructions can be used. 
 	# Done handling the interupt, enable all interrupts.
