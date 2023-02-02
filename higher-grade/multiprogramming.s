@@ -1019,6 +1019,13 @@ __gets_system_call_pending:
 	la $t0, __gets_offset
 	lw $t0, 0($t0)
 
+	# If buffer is equal to zero, all input is ignored
+	beqz $a1, __return_to_other_job
+
+	# If buffer is equal to one
+	li $k1, 1
+	beq $a1, $k1, __buffer_length_one
+
 	# Get ASCII value of key pressed and save in $k1.
 	# The memory mapped transiver data register is at address 0xffff0004.
 	li $k1, 0xffff0004  
@@ -1037,10 +1044,14 @@ __gets_system_call_pending:
 	la $t1, __gets_offset
 	sw $t0, 0($t1)
 
+	
 	addi $t3, $a1, -1 # Get buffer size-1
 	bne $t3, $t0, __return_to_other_job # If buffer size - 1 == offset do
 	add $t3, $a0, $a1 # Get pointer to last character in string
 	sb $zero, 0($t3) # Store NUL character at end of string
+	j __pressed_return # If the buffer is full, return.
+
+	__buffer_length_one:
 	j __pressed_return # If the buffer is full, return.
 
 __return_to_other_job:
@@ -1079,6 +1090,10 @@ __return_to_other_job:
 
 __pressed_return:
 
+	add $t3, $a0, $t0 # Get pointer to last character in string
+	sb $zero, 0($t3) # Store NUL character at end of string
+
+	
 	# Restore used registers
 	lw $t0, 0($sp)
 	lw $t1, 4($sp)
