@@ -1019,8 +1019,10 @@ __gets_system_call_pending:
 	la $t0, __gets_offset
 	lw $t0, 0($t0)
 
-	# If buffer is equal to zero, all input is ignored
-	beqz $a1, __return_to_other_job
+	# If buffer is < 1, all input is ignored
+	li $t2, 1
+	slt $t3, $a1, $t2 # Buffer size < 1 
+	beq $t3, $t2, __return_to_other_job # if buffer size < 1 return to other job
 
 	# If buffer is equal to one
 	li $k1, 1
